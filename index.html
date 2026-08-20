@@ -310,6 +310,8 @@ html.dark .kj-seg button.on { background: hsl(var(--accent)); }
   color: hsl(var(--muted-foreground)); margin-bottom: 4px; }
 .kj-done::before { content: ""; width: 6px; height: 6px; border-radius: 9999px;
   background: hsl(var(--primary)); flex: none; }
+.kj-hr { border: none; border-top: 1px solid hsl(var(--border)); margin: 10px 0; }
+.kj-theme-inline { position: static; width: 30px; height: 30px; flex: none; }
 </style><script id="kj-enhance-js">/* 跨境智训 增强层 v2 · 暗夜切换(顶部一级入口) + 测评设置 Bottom Sheet + 聊天气泡美化 + 思考指示器 */
 (function () {
   "use strict";
@@ -337,13 +339,15 @@ html.dark .kj-seg button.on { background: hsl(var(--accent)); }
   function buildUI() {
     if (document.getElementById("kj-fab")) return;
 
-    /* 顶部主题按钮（一级入口） */
+    /* 顶部主题按钮（优先挂顶栏，见 mountThemeBtn） */
     var tbtn = el("button", "kj-theme-btn");
+    tbtn.id = "kj-theme-btn";
     tbtn.title = "切换深色/浅色";
     tbtn.setAttribute("aria-label", "切换深色/浅色");
     tbtn.innerHTML = theme === "dark" ? SUN : MOON;
     tbtn.onclick = function () { theme = (theme === "dark" ? "light" : "dark"); applyTheme(theme, tbtn); };
     document.body.appendChild(tbtn);
+    mountThemeBtn();
 
     /* FAB + Sheet（仅测评设置） */
     var fab = el("button", "kj-fab");
@@ -476,6 +480,7 @@ html.dark .kj-seg button.on { background: hsl(var(--accent)); }
         out.push('<div class="kj-quote">' + q.map(inline).join("<br>") + "</div>");
         continue;
       }
+      if (/^\s*(-{3,}|_{3,})\s*$/.test(ln)) { out.push('<hr class="kj-hr">'); i++; continue; }
       var lm = ln.match(/^(\s*)([-*•]|\d+[.、])\s+(.*)$/);
       if (lm) { out.push('<div class="kj-li">' + inline(lm[3]) + "</div>"); i++; continue; }
       if (/^\s*$/.test(ln)) { i++; continue; }
@@ -488,6 +493,7 @@ html.dark .kj-seg button.on { background: hsl(var(--accent)); }
   function isUserBubble(d) { return d.className && /justify-end/.test(d.className); }
 
   function thinkPill(bubble) {
+    if (bubble.getAttribute("data-kj-rendered") || bubble.querySelector(".kj-done")) return null;
     var pill = bubble.querySelector(".kj-think");
     if (!pill) {
       if (!bubble._kjT0) bubble._kjT0 = Date.now();
@@ -515,23 +521,27 @@ html.dark .kj-seg button.on { background: hsl(var(--accent)); }
   }
 
   function processBubble(b) {
-    if (isUserBubble(b)) return;
-    var tw = b.querySelector('[class*="whitespace-pre-wrap"]');
-    if (!tw) return;
-    var streaming = !!b.querySelector('[class*="type-cursor"]') || /type-cursor/.test(tw.className);
-    if (streaming) {
-      var txt = tw.textContent.trim();
-      if (!txt || txt === "…") thinkPill(b); else clearPill(b);
-      return;
-    }
-    clearPill(b);
-    markDone(b);
-    if (b.getAttribute("data-kj-rendered")) return;
-    var raw = tw.textContent;
-    if (!raw.trim()) return;
-    if (!/[#*|>`\-]/.test(raw)) { b.setAttribute("data-kj-rendered", "1"); return; }
-    tw.innerHTML = renderBlock(raw);
-    b.setAttribute("data-kj-rendered", "1");
+    try {
+      if (isUserBubble(b)) return;
+      var tw = b.querySelector('[class*="whitespace-pre-wrap"]');
+      if (!tw) return;
+      var streaming = !!b.querySelector('[class*="type-cursor"]') || /type-cursor/.test(tw.className);
+      if (streaming) {
+        var txt = tw.textContent.trim();
+        if (!txt || txt === "…") thinkPill(b); else clearPill(b);
+        /* 300 秒硬上限：任何异常都绝不允许计时器无限跑 */
+        if (b._kjT0 && Date.now() - b._kjT0 > 300000) { clearPill(b); markDone(b); }
+        return;
+      }
+      clearPill(b);
+      markDone(b);
+      if (b.getAttribute("data-kj-rendered")) return;
+      var raw = tw.textContent;
+      if (!raw.trim()) return;
+      if (!/[#*|>`\-]/.test(raw)) { b.setAttribute("data-kj-rendered", "1"); return; }
+      tw.innerHTML = renderBlock(raw);
+      b.setAttribute("data-kj-rendered", "1");
+    } catch (e) {}
   }
 
   function scan() {
@@ -542,11 +552,32 @@ html.dark .kj-seg button.on { background: hsl(var(--accent)); }
   function startBubbleWatcher() {
     var obs = new MutationObserver(function () {
       clearTimeout(window.__kjScanT);
-      window.__kjScanT = setTimeout(scan, 120);
+      window.__kjScanT = setTimeout(scan, 100);
     });
     obs.observe(document.body, { childList: true, subtree: true, characterData: true,
       attributes: true, attributeFilter: ["class"] });
+    /* 轮巡兜底：事件订阅在任何异常下漏网都能收敛到正确终态 */
+    setInterval(function () { scan(); mountThemeBtn(); }, 400);
     scan();
+  }
+
+  /* 主题按钮挂载：优先挂到练习页顶栏（一级菜单），找不到才浮动 */
+  function mountThemeBtn() {
+    var btn = document.getElementById("kj-theme-btn");
+    if (!btn) return;
+    var tabBtn = null;
+    var btns = document.querySelectorAll("button");
+    for (var i = 0; i < btns.length; i++) {
+      if (btns[i].textContent.trim() === "学情诊断") { tabBtn = btns[i]; break; }
+    }
+    var header = tabBtn && tabBtn.parentElement && tabBtn.parentElement.parentElement;
+    if (header && header !== btn.parentElement) {
+      btn.classList.add("kj-theme-inline");
+      header.appendChild(btn);
+    } else if (!header && btn.classList.contains("kj-theme-inline")) {
+      btn.classList.remove("kj-theme-inline");
+      document.body.appendChild(btn);
+    }
   }
 
   applyTheme(theme, null);
