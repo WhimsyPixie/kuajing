@@ -504,36 +504,20 @@ html.dark .kj-seg button.on { background: hsl(var(--accent)); }
 
   function processBubble(b) {
     if (isUserBubble(b)) return;
-    var streaming = !!b.querySelector('[class*="caret-blink"]');
+    var tw = b.querySelector('[class*="whitespace-pre-wrap"]');
+    if (!tw) return;
+    var streaming = !!b.querySelector('[class*="type-cursor"]') || /type-cursor/.test(tw.className);
     if (streaming) {
-      var textHolder = null;
-      var kids = b.querySelectorAll("div");
-      for (var k = 0; k < kids.length; k++) {
-        if (kids[k].querySelector('[class*="caret-blink"]')) continue;
-        if (kids[k].textContent.trim()) textHolder = kids[k];
-      }
-      var hasText = false;
-      var divs = b.querySelectorAll("div");
-      for (var j = 0; j < divs.length; j++) {
-        if (divs[j].querySelector('[class*="caret-blink"]') === null && divs[j].textContent.replace(/智能体思考中…|已思考[\d. s]*/g, "").trim()) { hasText = true; break; }
-      }
-      if (!hasText) thinkPill(b); else clearPill(b);
+      var txt = tw.textContent.trim();
+      if (!txt || txt === "…") thinkPill(b); else clearPill(b);
       return;
     }
     clearPill(b);
     if (b.getAttribute("data-kj-rendered")) return;
-    var holder = null;
-    var cand = b.querySelectorAll("div");
-    for (var m = cand.length - 1; m >= 0; m--) {
-      var c = cand[m];
-      if (c.querySelector("img")) continue;
-      if (c.textContent.trim().length > 2) { holder = c; break; }
-    }
-    if (!holder) return;
-    var raw = holder.textContent;
+    var raw = tw.textContent;
     if (!raw.trim()) return;
     if (!/[#*|>`\-]/.test(raw)) { b.setAttribute("data-kj-rendered", "1"); return; }
-    holder.innerHTML = renderBlock(raw);
+    tw.innerHTML = renderBlock(raw);
     b.setAttribute("data-kj-rendered", "1");
   }
 
