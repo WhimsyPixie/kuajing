@@ -306,6 +306,10 @@ html.dark .kj-seg button.on { background: hsl(var(--accent)); }
 .kj-pre { background: hsl(var(--secondary)); border-radius: 10px; padding: 10px 12px; margin: 8px 0;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px;
   white-space: pre-wrap; word-break: break-word; }
+.kj-done { display: flex; align-items: center; gap: 6px; font-size: 12px;
+  color: hsl(var(--muted-foreground)); margin-bottom: 4px; }
+.kj-done::before { content: ""; width: 6px; height: 6px; border-radius: 9999px;
+  background: hsl(var(--primary)); flex: none; }
 </style><script id="kj-enhance-js">/* 跨境智训 增强层 v2 · 暗夜切换(顶部一级入口) + 测评设置 Bottom Sheet + 聊天气泡美化 + 思考指示器 */
 (function () {
   "use strict";
@@ -486,13 +490,13 @@ html.dark .kj-seg button.on { background: hsl(var(--accent)); }
   function thinkPill(bubble) {
     var pill = bubble.querySelector(".kj-think");
     if (!pill) {
+      if (!bubble._kjT0) bubble._kjT0 = Date.now();
       pill = el("div", "kj-think");
-      pill.innerHTML = '<span class="kj-spin"></span><span class="kj-think-t">智能体思考中…</span><span class="kj-think-s"></span>';
+      pill.innerHTML = '<span class="kj-spin"></span><span class="kj-think-t">思考中</span><span class="kj-think-s"></span>';
       bubble.appendChild(pill);
-      var t0 = Date.now();
       var sEl = pill.querySelector(".kj-think-s");
       pill._timer = setInterval(function () {
-        sEl.textContent = "已思考 " + ((Date.now() - t0) / 1000).toFixed(1) + " s";
+        sEl.textContent = "（" + ((Date.now() - bubble._kjT0) / 1000).toFixed(1) + "s）";
       }, 100);
     }
     return pill;
@@ -500,6 +504,14 @@ html.dark .kj-seg button.on { background: hsl(var(--accent)); }
   function clearPill(bubble) {
     var pill = bubble.querySelector(".kj-think");
     if (pill) { clearInterval(pill._timer); pill.remove(); }
+  }
+  function markDone(bubble) {
+    /* 完成后在气泡顶部标注用时（DeepSeek 式） */
+    if (!bubble._kjT0) return;
+    if (bubble.querySelector(".kj-done")) return;
+    var sec = ((Date.now() - bubble._kjT0) / 1000).toFixed(1);
+    var d = el("div", "kj-done", "思考已完成 · 用时 " + sec + " s");
+    bubble.insertBefore(d, bubble.firstChild);
   }
 
   function processBubble(b) {
@@ -513,6 +525,7 @@ html.dark .kj-seg button.on { background: hsl(var(--accent)); }
       return;
     }
     clearPill(b);
+    markDone(b);
     if (b.getAttribute("data-kj-rendered")) return;
     var raw = tw.textContent;
     if (!raw.trim()) return;
@@ -531,7 +544,8 @@ html.dark .kj-seg button.on { background: hsl(var(--accent)); }
       clearTimeout(window.__kjScanT);
       window.__kjScanT = setTimeout(scan, 120);
     });
-    obs.observe(document.body, { childList: true, subtree: true, characterData: true });
+    obs.observe(document.body, { childList: true, subtree: true, characterData: true,
+      attributes: true, attributeFilter: ["class"] });
     scan();
   }
 
